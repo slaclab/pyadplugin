@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class ADPluginServer:
-    def __init__(self, prefix, source, queuesize=5, enable_callbacks=0,
-                 min_cbtime=0):
-        self.server = PypvServer(prefix)
+    def __init__(self, prefix, ad_prefix, stream,
+                 enable_callbacks=0, min_cbtime=0, queuesize=5):
+        self.server = PypvServer(ad_prefix + prefix)
+        self.ad_prefix = ad_prefix
         self.ad_directory = {}
         self.settings_lock = RLock()
         self.plugins = {}
@@ -25,8 +26,8 @@ class ADPluginServer:
         self.queue = None
         queuesize = int(queuesize)
 
-        self._ndarray_port_cb(value=str(source))
-        self._add_builtin('NDArrayPort', str(source), cb=self._ndarray_port_cb)
+        self._ndarray_port_cb(value=str(stream))
+        self._add_builtin('NDArrayPort', str(stream), cb=self._ndarray_port_cb)
         self._enable_callbacks_cb(value=self.enable_callbacks)
         self._add_builtin('EnableCallbacks', self.enable_callbacks,
                           cb=self._enable_callbacks_cb)
@@ -94,13 +95,16 @@ class ADPluginServer:
                     new_queue.put(self.queue.get(block=False))
                 self.queue = new_queue
 
-    def _initialize_pv(self, pvname):
-        self.mon_pv = PV(pvname, callback=self._mark_has_update)
-        self.mon_pv._args['count'] = 1
-        self.mon_pv.auto_monitor = True
-        self.get_pv = PV(pvname)
-        self.mon_pv.connect(timeout=0)
+    def _initialize_pv(self, stream):
+        get_pvname = self.ad_prefix + stream + ':ArrayData'
+        logger.debug('getting data from %s', get_pvname)
+        self.get_pv = PV(get_pvname)
         self.get_pv.connect(timeout=0)
+
+        mon_pvname = self.ad_prefix + stream + ':UniqueId_RBV'
+        logger.debug('monitoring changes from %s', mon_pvname)
+        self.mon_pv = PV(mon_pvname, callback=self._mark_has_update,
+                         auto_monitor=True)
 
     def _mark_has_update(self, **kwargs):
         self.has_update.set()
@@ -168,10 +172,12 @@ class ADPluginServer:
             if get_array:
                 try:
                     array = queue.get(timeout=1)
-                    logger.debug('got an array!')
+                    logger.debug('got an array of type %s!', type(array))
+                    if array is None:
+                        logger.warning('No array: Make sure image PV exists!')
                     self._update_queue_use()
                 except Empty:
-                    logger.debug('queue wait timed out after 1s')
+                    pass
 
             if array is not None:
                 logger.debug('run the plugins now')
