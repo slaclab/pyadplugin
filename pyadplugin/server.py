@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from time import sleep
-from threading import Thread, RLock
-from queue import Queue
+from time import sleep, time
+from threading import Thread, RLock, Event
+from queue import Queue, Empty
 import logging
 
 from epics import PV
@@ -19,7 +19,7 @@ class ADPluginServer:
         self.ad_directory = {}
         self.settings_lock = RLock()
         self.plugins = {}
-        self.has_update = False
+        self.has_update = Event()
         self.enable_callbacks = int(enable_callbacks)
         self.min_cbtime = float(min_cbtime)
         self.queue = None
@@ -49,7 +49,7 @@ class ADPluginServer:
             def cb(**kwargs):
                 pass
 
-        def callback(value=None, **kwargs):
+        def callback(value=None, rbv=rbv, cb=cb, **kwargs):
             rbv.put(value)
             cb(value=value, **kwargs)
         setter = PyPV(name, value=value, server=self.server,
@@ -103,67 +103,83 @@ class ADPluginServer:
         self.get_pv.connect(timeout=0)
 
     def _mark_has_update(self, **kwargs):
-        self.has_update = True
+        self.has_update.set()
+
+    def _update_queue_use(self):
+        with self.settings_lock:
+            queue_use_pv = self.ad_directory['QueueUse_RBV']
+            logger.debug('queue has %s elements', self.queue.qsize())
+            queue_use_pv.put(self.queue.qsize())
 
     def _get_queue_loop(self, **kwargs):
         while True:
+            start = time()
             logger.debug('start get queue')
             with self.settings_lock:
-                if all((self.enable_callbacks, self.plugins,
-                        self.has_update)):
-                    logger.debug('we will try to get an array')
-                    self.has_update = False
-                    if self.queue.full():
+                queue = self.queue
+                if self.enable_callbacks and self.plugins:
+                    logger.debug('we will try to get an array from epics')
+                    get_array = True
+                else:
+                    logger.debug('we will not try to get an array from epics,'
+                                 + 'enable_callbacks=%s, num_plugins=%s',
+                                 self.enable_callbacks, len(self.plugins))
+                    get_array = False
+
+            success = False
+            if get_array:
+                ok = self.has_update.wait(timeout=1.0)
+                if ok:
+                    if queue.full():
                         logger.debug('queue was full')
-                        dropped_pv = self.ad_directory['DroppedArrays']
-                        dropped_pv.put(dropped_pv.get() + 1)
-                        logger.debug('dropped %s arrays total',
-                                     dropped_pv.get())
+                        dropped_pv = self.ad_directory['DroppedArrays_RBV']
+                        n_dropped = dropped_pv.get()
+                        dropped_pv.put(n_dropped + 1)
+                        logger.debug('dropped %s arrays total', n_dropped)
                     else:
                         array = self.get_pv.get()
                         logger.debug('we got an array, stashing into queue')
-                        self.queue.put(array)
-                    did_cb = True
+                        queue.put(array)
+                        self._update_queue_use()
+                        success = True
                 else:
-                    logger.debug('we will not try to get an array,'
-                                 + 'enable_callbacks=%s, num_plugins=%s,'
-                                 + 'has_update=%s', self.enable_callbacks,
-                                 len(self.plugins), self.has_update)
-                    did_cb = False
-                queue_use_pv = self.ad_directory['QueueUse']
-                logger.debug('queue has %s elements', self.queue.qsize())
-                queue_use_pv.put(self.queue.qsize())
+                    logger.debug('wait for image update timed out after 1s')
+            elapsed = time() - start
 
-            logger.debug('post get queue sleep')
-            if did_cb:
-                sleep(self.min_cbtime)
-            else:
-                sleep(max(self.min_cbtime, 1))
+            if success:
+                sleep(max(self.min_cbtime - elapsed, 0))
 
     def _array_cb_loop(self):
         while True:
+            start = time()
             logger.debug('start array cb loop')
             array = None
             with self.settings_lock:
+                queue = self.queue
                 if self.enable_callbacks and self.plugins:
-                    logger.debug('lets try to get a queued array')
-                    did_cb = True
-                    if not self.queue.empty():
-                        array = self.queue.get()
-                        logger.debug('got an array!')
+                    logger.debug('lets wait for a queued array...')
+                    get_array = True
                 else:
-                    did_cb = False
+                    logger.debug('we will not get a queued array,'
+                                 + 'enable_callbacks=%s, num_plugins=%s',
+                                 self.enable_callbacks, len(self.plugins))
+                    get_array = False
+
+            if get_array:
+                try:
+                    array = queue.get(timeout=1)
+                    logger.debug('got an array!')
+                    self._update_queue_use()
+                except Empty:
+                    logger.debug('queue wait timed out after 1s')
 
             if array is not None:
                 logger.debug('run the plugins now')
                 for plugin in self.plugins.values():
                     plugin(array)
-
-            logger.debug('post array cb sleep')
-            if did_cb:
-                sleep(self.min_cbtime)
-            else:
-                sleep(max(self.min_cbtime, 1))
+                elapsed = time() - start
+                logger.debug('post array cb sleep')
+                sleep(max(self.min_cbtime - elapsed, 0))
 
 
 class ADPluginPV(PyPV):
