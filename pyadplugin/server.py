@@ -13,6 +13,22 @@ logger = logging.getLogger(__name__)
 
 
 class ADPluginServer:
+    """
+    Server to mimic some of the plugin records/functionality from AreaDetector.
+    The goal was for the user to only need to supply configuration parameters
+    and functions to run that take the image np.ndarray as an argument. These
+    servers have the following PVs: (set them from the equivalent non-_RBV PV)
+
+    Attributes
+    ----------
+    $(ad_prefix)$(prefix)NDArrayPort_RBV:
+        In AD this is a port name, but here we have to take from an array pv.
+        This is where we store the stream argument e.g. IMAGE1
+
+    $(ad_prefix)$(prefix)EnableCallbacks:
+        If this is set to 0, The plugin will be disabled. Otherwise, the plugin
+        will be active.
+    """
     def __init__(self, prefix, ad_prefix, stream,
                  enable_callbacks=0, min_cbtime=0, queuesize=5):
         self.server = PypvServer(ad_prefix + prefix)
@@ -151,9 +167,11 @@ class ADPluginServer:
                     success = True
                 else:
                     logger.debug('wait for image update timed out after 1s')
-            elapsed = time() - start
+            else:
+                sleep(1)
 
             if success:
+                elapsed = time() - start
                 sleep(max(self.min_cbtime - elapsed, 0))
 
     def _array_cb_loop(self):
@@ -189,6 +207,9 @@ class ADPluginServer:
                 elapsed = time() - start
                 logger.debug('post array cb sleep')
                 sleep(max(self.min_cbtime - elapsed, 0))
+
+            if not get_array:
+                sleep(1)
 
 
 class ADPluginPV(PyPV):
