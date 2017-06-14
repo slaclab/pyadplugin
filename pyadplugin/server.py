@@ -145,7 +145,10 @@ class ADPluginServer:
                         logger.debug('we got an array, stashing into queue')
                         queue.put(array)
                         self._update_queue_use()
-                        success = True
+                    # Mark success True even if the Queue was full so we hit
+                    # the minimum callback sleep and we don't barrage the
+                    # python process's cpu usage with dropped array counts
+                    success = True
                 else:
                     logger.debug('wait for image update timed out after 1s')
             elapsed = time() - start
