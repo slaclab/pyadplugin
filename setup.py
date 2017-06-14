@@ -7,5 +7,6 @@ setup(name='pyadplugin',
       license='BSD',
       author='SLAC National Accelerator Laboratory',
       packages=find_packages(),
-      description='Python IOC for Rapid Prototyping of AreaDetector Plugins',
+      description=('Python IOC Schema for Rapid Prototyping '
+                   'of AreaDetector Plugins'),
       )
