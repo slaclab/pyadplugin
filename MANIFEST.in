@@ -1,0 +1,2 @@
+include versioneer.py
+include pyadplugin/_version.py
