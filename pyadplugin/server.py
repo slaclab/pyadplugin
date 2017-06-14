@@ -313,6 +313,8 @@ class ADPluginPV(PyPV):
         name: str
             The prefix to use for the value. This will be displayed at
             $(ad_prefix)$(prefix)$(name)
+            And the value of the PV will be the value returned from the plugin
+            function.
 
         value: str, int, or float
             An initial value for the PV that sets the data type.
