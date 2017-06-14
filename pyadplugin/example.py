@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def wfsum(array):
+def wfsum(array, height=None, width=None):
     # time.sleep(1)  # To check how it works with slow plugins
     # logger.debug('we did a callback')
     return sum(array)
