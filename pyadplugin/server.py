@@ -191,6 +191,14 @@ class ADPluginServer:
         self.mon_pv = PV(mon_pvname, callback=self._mark_has_update,
                          auto_monitor=True)
 
+        width_pvname = self.ad_prefix + stream + ':ArraySize0_RBV'
+        width_pv = PV(width_pvname)
+        self.width = width_pv.get()
+
+        height_pvname = self.ad_prefix + stream + ':ArraySize1_RBV'
+        height_pv = PV(height_pvname)
+        self.height = height_pv.get()
+
     def _mark_has_update(self, **kwargs):
         """
         Callback to indicate that a new value is ready.
@@ -198,12 +206,18 @@ class ADPluginServer:
         self.has_update.set()
 
     def _update_queue_use(self):
+        """
+        Update the QueueUse_RBV PV
+        """
         with self.settings_lock:
             queue_use_pv = self.ad_directory['QueueUse_RBV']
             logger.debug('queue has %s elements', self.queue.qsize())
             queue_use_pv.put(self.queue.qsize())
 
     def _get_queue_loop(self, **kwargs):
+        """
+        Main event loop for getting arrays from EPICS
+        """
         while True:
             start = time()
             logger.debug('start get queue')
@@ -248,6 +262,9 @@ class ADPluginServer:
                 sleep(max(self.min_cbtime - elapsed, 0))
 
     def _array_cb_loop(self):
+        """
+        Main event loop for processing callbacks
+        """
         while True:
             start = time()
             logger.debug('start array cb loop')
@@ -276,7 +293,7 @@ class ADPluginServer:
             if array is not None:
                 logger.debug('run the plugins now')
                 for plugin in self.plugins.values():
-                    plugin(array)
+                    plugin(array, width=self.width, height=self.height)
                 elapsed = time() - start
                 logger.debug('post array cb sleep')
                 sleep(max(self.min_cbtime - elapsed, 0))
@@ -286,14 +303,36 @@ class ADPluginServer:
 
 
 class ADPluginPV(PyPV):
+    """
+    Subclass of pypvserver.PyPV that installs a plugin into the ADPluginServer.
+    """
     def __init__(self, name, value, plugin, server, **kwargs):
+        """
+        Parameters
+        ----------
+        name: str
+            The prefix to use for the value. This will be displayed at
+            $(ad_prefix)$(prefix)$(name)
+
+        value: str, int, or float
+            An initial value for the PV that sets the data type.
+
+        plugin: function
+            Does processing on the incoming array. Expects a single positional
+            argument that is the array, and two keyword values for width and
+            height. e.g. func(array, width=None, height=None).
+            EPICS arrays are one dimensional.
+
+        server: ADPluginServer
+            The server to attach to
+        """
         super().__init__(name, value, server=server.server, **kwargs)
         self.plugin = plugin
         self.adserver = server
         self.adserver.install_plugin(self)
 
-    def __call__(self, array):
+    def __call__(self, array, *, width, height):
         logger.debug('run plugin %s', self.name)
-        output = self.plugin(array)
+        output = self.plugin(array, width=width, height=height)
         self.put(output)
         logger.debug('plugin %s success', self.name)
