@@ -62,8 +62,8 @@ class ADPluginServer:
 
         stream: str
             The image stream to use for the plugins. We'll be using:
-                $(ad_prefix)$(stream)ArrayData    for values
-                $(ad_prefix)$(stream)UniqueId_RBV for update monitoring
+                $(ad_prefix)$(stream):ArrayData    for values
+                $(ad_prefix)$(stream):UniqueId_RBV for update monitoring
 
         enable_callbcaks: bool, optional
             If True, start the IOC with callbacks enabled. Start disabled
@@ -292,7 +292,9 @@ class ADPluginServer:
 
             if array is not None:
                 logger.debug('run the plugins now')
-                for plugin in self.plugins.values():
+                with self.settings_lock:
+                    all_plugins = list(self.plugins.values())
+                for plugin in all_plugins:
                     plugin(array, width=self.width, height=self.height)
                 elapsed = time() - start
                 logger.debug('post array cb sleep')
