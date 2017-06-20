@@ -380,7 +380,11 @@ class ADPluginFunction:
         server.
         """
         logger.debug('run plugin %s', self.name)
-        output = self.plugin(array, width=width, height=height)
+        try:
+            output = self.plugin(array, width=width, height=height)
+        except:
+            logger.error('exception thrown in plugin %s, skipping', self.name)
+            return
         logger.debug('plugin %s outputs %s', self.name, output)
         try:
             items = output.items()
