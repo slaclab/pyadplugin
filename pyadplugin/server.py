@@ -353,13 +353,13 @@ class ADPluginFunction:
         """
         if isinstance(value, dict):
             pvs = {}
-            for key, start_value in value.items()):
+            for key, start_value in value.items():
                 pvs.update(self.initialize_pvs(key, start_value))
             return pvs
         else:
-            return {name : PvPV(name, value, server=self.server)}
+            return {name: PyPV(name, value, server=self.server)}
 
-    def update_pv(value, name=None):
+    def update_pv(self, value, name=None):
         """
         Get the relevant pv object as designated by name and assign it a new
         value. Do this in a function so we can have proper log messages.

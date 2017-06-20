@@ -13,6 +13,7 @@ def wfsum(array, height=None, width=None):
     # logger.debug('we did a callback')
     return sum(array)
 
+
 def minmax(array, height=None, width=None):
     return {"MAX": max(array), "MIN": min(array)}
 
