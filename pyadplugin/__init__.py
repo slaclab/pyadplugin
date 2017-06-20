@@ -1,4 +1,4 @@
-from .server import ADPluginServer, ADPluginPV
+from .server import ADPluginServer, ADPluginFunction # NOQA
 
 from ._version import get_versions
 __version__ = get_versions()['version']
