@@ -18,6 +18,10 @@ def minmax(array, height=None, width=None):
     return {"MAX": max(array), "MIN": min(array)}
 
 
+def bad(array, height=None, width=None):
+    raise RuntimeError('my b')
+
+
 # Switch this to a camera you'd like to test with
 ad_prefix = 'HX2:SB1:CVV:01:'
 
@@ -28,3 +32,4 @@ server = ADPluginServer(prefix='SUM:',
                         enable_callbacks=True)
 func1 = ADPluginFunction("SUM", 0, wfsum, server)
 func2 = ADPluginFunction("minmax", {"MAX": 0, "MIN": 0}, minmax, server)
+func3 = ADPluginFunction("BAD", 0, bad, server)
