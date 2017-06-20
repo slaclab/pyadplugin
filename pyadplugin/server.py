@@ -357,7 +357,7 @@ class ADPluginFunction:
                 pvs.update(self.initialize_pvs(key, start_value))
             return pvs
         else:
-            return {name: PyPV(name, value, server=self.server)}
+            return {name: PyPV(name, value, server=self.pvserver)}
 
     def update_pv(self, value, name=None):
         """
