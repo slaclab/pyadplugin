@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import time  # NOQA
 import logging
-from pyadplugin import ADPluginServer, ADPluginPV
+from pyadplugin import ADPluginServer, ADPluginFunction
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -13,6 +13,9 @@ def wfsum(array, height=None, width=None):
     # logger.debug('we did a callback')
     return sum(array)
 
+def minmax(array, height=None, width=None):
+    return {"MAX": max(array), "MIN": min(array)}
+
 
 # Switch this to a camera you'd like to test with
 ad_prefix = 'HX2:SB1:CVV:01:'
@@ -22,4 +25,5 @@ server = ADPluginServer(prefix='SUM:',
                         stream='IMAGE1',
                         min_cbtime=10,
                         enable_callbacks=True)
-pv = ADPluginPV("SUM", 0, wfsum, server)
+func1 = ADPluginFunction("SUM", 0, wfsum, server)
+func2 = ADPluginFunction("minmax", {"MAX": 0, "MIN": 0}, minmax, server)
