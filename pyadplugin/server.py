@@ -123,14 +123,15 @@ class ADPluginServer:
 
     def install_plugin(self, plugin):
         """
-        Called by ADPluginPV to register itself with the server.
+        Called by ADPluginFunction to register itself with the server.
         """
         with self.settings_lock:
             self.plugins[plugin.name] = plugin
 
     def uninstall_plugin(self, plugin):
         """
-        You can call this to remove a plugin.
+        You can call this to remove a plugin. This will not disconnect the PVs,
+        it will only stop them from updating.
         """
         with self.settings_lock:
             del self.plugins[plugin.name]
@@ -304,39 +305,90 @@ class ADPluginServer:
                 sleep(1)
 
 
-class ADPluginPV(PyPV):
+class ADPluginFunction:
     """
-    Subclass of pypvserver.PyPV that installs a plugin into the ADPluginServer.
+    Class that installs PVs whose values come from a single function.
     """
-    def __init__(self, name, value, plugin, server, **kwargs):
+    def __init__(self, name, value, plugin, server):
         """
         Parameters
         ----------
         name: str
-            The prefix to use for the value. This will be displayed at
-            $(ad_prefix)$(prefix)$(name)
-            And the value of the PV will be the value returned from the plugin
-            function.
+            The prefix to use for the plugin. This will be create a pv at
+            $(ad_prefix)$(prefix)$(name), if value is a single value.
+            If value is not a single value, this will not be used in the PV
+            name but will still be used as this object's name in debug
+            statements, etc.
 
-        value: str, int, or float
-            An initial value for the PV that sets the data type.
+        value: str, int, float, or dict
+            An initial value for the PV that sets the data type. If this is a
+            dictionary, it should be a mapping of name to initial value, and
+            doing this marks that the plugin returns multiple values. These
+            values will be hosted at:
+            $(ad_prefix)$(prefix)$(key)
+            for each key in the dictionary.
 
         plugin: function
             Does processing on the incoming array. Expects a single positional
             argument that is the array, and two keyword values for width and
             height. e.g. func(array, width=None, height=None).
             EPICS arrays are one dimensional.
+            This should either return a single value (int, float, or str) or a
+            dictionary mapping of names to values as in the value argument.
 
         server: ADPluginServer
             The server to attach to
         """
-        super().__init__(name, value, server=server.server, **kwargs)
-        self.plugin = plugin
+        self.name = name
         self.adserver = server
+        self.pvserver = server.server
+        self.pvs = self.initialize_pvs(name, value)
+        self.plugin = plugin
         self.adserver.install_plugin(self)
 
+    def initialize_pvs(self, name, value):
+        """
+        Given valid arguments from __init__, create the pvs dictionary for this
+        function.
+        """
+        if isinstance(value, dict):
+            pvs = {}
+            for key, start_value in value.items()):
+                pvs.update(self.initialize_pvs(key, start_value))
+            return pvs
+        else:
+            return {name : PvPV(name, value, server=self.server)}
+
+    def update_pv(value, name=None):
+        """
+        Get the relevant pv object as designated by name and assign it a new
+        value. Do this in a function so we can have proper log messages.
+        """
+        if name is None:
+            name = self.name
+        try:
+            pvobj = self.pvs[name]
+        except KeyError:
+            logger.error('we tried updating pvname %s that did not exist',
+                         name)
+        logger.debug('putting value %s to plugin pv %s', value, name)
+        pvobj.put(value)
+
     def __call__(self, array, *, width, height):
+        """
+        Handle calling our plugin function and accepting values from the
+        server.
+        """
         logger.debug('run plugin %s', self.name)
         output = self.plugin(array, width=width, height=height)
-        self.put(output)
-        logger.debug('plugin %s success', self.name)
+        logger.debug('plugin %s outputs %s', self.name, output)
+        try:
+            items = output.items()
+            logger.debug('plugin %s assigning values to all pvs', self.name)
+            for name, value in items:
+                self.update_pv(value, name)
+        except AttributeError:
+            logger.debug('plugin %s putting value %s to solo pv',
+                         self.name, value)
+            self.update_pv(value)
+        logger.debug('plugin %s done updating pvs', self.name)
