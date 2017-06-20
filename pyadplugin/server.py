@@ -383,7 +383,8 @@ class ADPluginFunction:
         try:
             output = self.plugin(array, width=width, height=height)
         except:
-            logger.error('exception thrown in plugin %s, skipping', self.name)
+            logger.exception('exception thrown in plugin %s, skipping',
+                             self.name)
             return
         logger.debug('plugin %s outputs %s', self.name, output)
         try:
@@ -392,7 +393,7 @@ class ADPluginFunction:
             for name, value in items:
                 self.update_pv(value, name)
         except AttributeError:
-            logger.debug('plugin %s putting value %s to solo pv',
+            logger.debug('plugin %s putting value %s to one pv',
                          self.name, output)
             self.update_pv(output)
         logger.debug('plugin %s done updating pvs', self.name)
