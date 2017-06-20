@@ -389,6 +389,6 @@ class ADPluginFunction:
                 self.update_pv(value, name)
         except AttributeError:
             logger.debug('plugin %s putting value %s to solo pv',
-                         self.name, value)
-            self.update_pv(value)
+                         self.name, output)
+            self.update_pv(output)
         logger.debug('plugin %s done updating pvs', self.name)
